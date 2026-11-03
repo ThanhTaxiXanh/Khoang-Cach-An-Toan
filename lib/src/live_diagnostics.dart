@@ -6,6 +6,7 @@ class LiveSample {
     required this.outputFps,
     required this.cachedMs,
     required this.cachedPackets,
+    this.sessionId = 0,
   });
 
   final DateTime time;
@@ -13,6 +14,7 @@ class LiveSample {
   final double outputFps;
   final int cachedMs;
   final int cachedPackets;
+  final int sessionId;
 
   factory LiveSample.fromNative(
     DateTime time,
@@ -26,6 +28,7 @@ class LiveSample {
       outputFps: asDouble('outputFps'),
       cachedMs: asInt('cachedMs'),
       cachedPackets: asInt('cachedPackets'),
+      sessionId: asInt('currentSession'),
     );
   }
 }

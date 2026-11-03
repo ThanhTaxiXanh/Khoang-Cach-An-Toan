@@ -46,6 +46,13 @@ class IjkSurfaceView(
     private var renderingStarted = false
     private var firstFrameStartupMs: Long = 0L
     private var surfaceLostEvents = 0
+    private var sessionIndex = 0
+    private var successfulSessions = 0
+    private var runStartedMs = 0L
+    private var firstFrameAtMs = 0L
+    private var lastReconnectReason = ""
+    // Keep a bounded, timestamped in-memory event history (no video recording).
+    private val recentEvents = ArrayDeque<Map<String, Any>>()
     // Linker/JNI failure is process-local and cannot be fixed by RTSP retry.
     private var fatalNativeMessage: String? = null
 
@@ -98,6 +105,13 @@ class IjkSurfaceView(
         retryAttempt = 0
         retryEvents = 0
         bufferEvents = 0
+        sessionIndex = 0
+        successfulSessions = 0
+        firstFrameAtMs = 0L
+        lastReconnectReason = ""
+        runStartedMs = SystemClock.elapsedRealtime()
+        recentEvents.clear()
+        recordEvent("open", "RTSP ${transport.uppercase()} / profile $profile")
         // A surface can be created after MethodChannel.open completes.
         if (surfaceReady) begin()
         else signal("waiting_surface", "Đang tạo SurfaceView để nhận video...")
@@ -108,8 +122,11 @@ class IjkSurfaceView(
         releasePlayer()
         val targetUrl = url ?: return
         attemptStartedAt = SystemClock.elapsedRealtime()
+        sessionIndex++
         renderingStarted = false
+        firstFrameAtMs = 0L
         firstFrameStartupMs = 0L
+        recordEvent("session_start", "Bắt đầu phiên $sessionIndex")
         signal("connecting", "IJKPlayer mở RTSP: $targetUrl")
         try {
             val newPlayer = IjkMediaPlayer()
@@ -124,8 +141,17 @@ class IjkSurfaceView(
                 if (player !== newPlayer || !requested) return@setOnInfoListener true
                 when (what) {
                     IMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START -> {
+                        // Notify only the first frame for each native session.
+                        if (!renderingStarted) {
+                            firstFrameAtMs = SystemClock.elapsedRealtime()
+                            successfulSessions++
+                            firstFrameStartupMs = firstFrameAtMs - attemptStartedAt
+                            recordEvent(
+                                "first_frame",
+                                "Phiên $sessionIndex: khung đầu sau ${firstFrameStartupMs}ms"
+                            )
+                        }
                         renderingStarted = true
-                        firstFrameStartupMs = SystemClock.elapsedRealtime() - attemptStartedAt
                         retryAttempt = 0
                         bufferStartedAt = 0L
                         signal("playing", "Đã hiển thị khung hình trực tiếp")
@@ -133,10 +159,12 @@ class IjkSurfaceView(
                     IMediaPlayer.MEDIA_INFO_BUFFERING_START -> {
                         bufferStartedAt = SystemClock.elapsedRealtime()
                         bufferEvents++
+                        recordEvent("buffer_start", "IJK báo bắt đầu đệm RTP")
                         signal("buffering", "Đang chờ dữ liệu RTP...")
                     }
                     IMediaPlayer.MEDIA_INFO_BUFFERING_END -> {
                         bufferStartedAt = 0L
+                        recordEvent("buffer_end", "IJK báo kết thúc đệm RTP")
                         signal(
                             if (renderingStarted) "playing" else "prepared",
                             "Luồng RTP đã được khôi phục"
@@ -165,6 +193,7 @@ class IjkSurfaceView(
             val reason = "IJK JNI không tương thích: ${error.javaClass.simpleName}: ${error.message ?: "không có chi tiết"}. " +
                 "Dừng tự nối lại. Đóng hẳn ứng dụng rồi mở lại sau khi cập nhật APK."
             fatalNativeMessage = reason
+            recordEvent("native_error", reason)
             requested = false
             retryPending = false
             releasePlayer()
@@ -233,6 +262,7 @@ class IjkSurfaceView(
         if (!renderingStarted && retryAttempt >= 3) {
             requested = false
             retryPending = false
+            recordEvent("stream_error", "$reason; đã hết số lần thử")
             releasePlayer()
             signal(
                 "stream_error",
@@ -241,6 +271,24 @@ class IjkSurfaceView(
             )
             return
         }
+        // Capture the precise reason and native state BEFORE releasePlayer().
+        val elapsed = (SystemClock.elapsedRealtime() - attemptStartedAt)
+            .coerceAtLeast(0L)
+        val activeFor = if (firstFrameAtMs > 0L) {
+            (SystemClock.elapsedRealtime() - firstFrameAtMs).coerceAtLeast(0L)
+        } else 0L
+        val fps = try { player?.videoOutputFramesPerSecond ?: 0f }
+            catch (_: Throwable) { 0f }
+        val cachedMs = try { player?.videoCachedDuration ?: 0L }
+            catch (_: Throwable) { 0L }
+        lastReconnectReason = reason
+        recordEvent(
+            "reconnect",
+            "Phiên $sessionIndex, trạng thái=$currentState, " +
+                "sống ${elapsed}ms, có hình ${activeFor}ms, " +
+                "FPS=${"%.1f".format(java.util.Locale.US, fps)}, " +
+                "IJK cache=${cachedMs}ms; $reason"
+        )
         retryPending = true
         retryEvents++
         val delaySec = min(16, 1 shl min(4, retryAttempt))
@@ -269,6 +317,22 @@ class IjkSurfaceView(
             }
         }
         surface.keepScreenOn = false
+    }
+
+    private fun recordEvent(type: String, detail: String) {
+        val now = SystemClock.elapsedRealtime()
+        recentEvents.addLast(
+            mapOf(
+                "timeMs" to System.currentTimeMillis(),
+                "elapsedMs" to if (runStartedMs == 0L) 0L
+                    else (now - runStartedMs).coerceAtLeast(0L),
+                "session" to sessionIndex,
+                "type" to type,
+                "detail" to detail
+            )
+        )
+        while (recentEvents.size > 48) recentEvents.removeFirst()
+        android.util.Log.i("TTX-IJK", "event=$type session=$sessionIndex $detail")
     }
 
     private fun signal(state: String, message: String) {
@@ -310,6 +374,10 @@ class IjkSurfaceView(
             "tcpKbps" to (tcpSpeed / 1024),
             "bufferEvents" to bufferEvents,
             "retries" to retryEvents,
+            "currentSession" to sessionIndex,
+            "successfulSessions" to successfulSessions,
+            "lastReconnectReason" to lastReconnectReason,
+            "recentEvents" to recentEvents.toList(),
             "state" to currentState,
             "hardwareRequested" to true,
             "decoder" to decoder,
@@ -323,6 +391,7 @@ class IjkSurfaceView(
     }
 
     fun close() {
+        if (requested) recordEvent("close", "Người dùng dừng phát")
         requested = false
         retryPending = false
         handler.removeCallbacksAndMessages(null)
@@ -346,7 +415,10 @@ class IjkSurfaceView(
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
-        if (requested) surfaceLostEvents++
+        if (requested) {
+            surfaceLostEvents++
+            recordEvent("surface_lost", "SurfaceView bị hủy")
+        }
         surfaceReady = false
         releasePlayer()
         if (requested) signal("waiting_surface", "Surface bị hủy, chờ khôi phục")

@@ -287,11 +287,14 @@ class _LiveScreenState extends State<LiveScreen> {
         : '${DateTime.now().difference(_runStartedAt!).inSeconds} giây';
     final lag = _observedLag.text.trim();
     return [
-      'TTX A500S Live - IJKPlayer V1.5',
+      'TTX A500S Live - IJKPlayer V1.6',
       'Thời gian: ${DateTime.now().toIso8601String()}',
       'RTSP: ${_host.text}:${_port.text}${_path.text}',
       'Transport: ${_transport.value}; profile: ${_profile.value}',
       'Trạng thái HIỆN TẠI: $_state; thời lượng phát: $elapsed',
+      'Tổng phiên native: ${_stats['currentSession'] ?? '--'}',
+      'Phiên có khung hình đầu: ${_stats['successfulSessions'] ?? '--'}',
+      'Lỗi kết nối gần nhất: ${_stats['lastReconnectReason'] ?? '--'}',
       'Surface bị hủy trong phiên: $_surfaceLostEvents lần',
       'Thông số hoạt động cuối lúc: ${_lastActiveTime?.toIso8601String() ?? "chưa có"}',
       'Trễ quan sát: ${lag.isEmpty ? "chưa ghi" : "$lag giây"}',
@@ -309,10 +312,41 @@ class _LiveScreenState extends State<LiveScreen> {
       'Gói video đang đệm: ${active['cachedPackets'] ?? '--'}',
       'Bytes video đang đệm: ${active['cachedBytes'] ?? '--'}',
       'Buffer events: ${active['bufferEvents'] ?? '--'}',
-      'Reconnects: ${active['retries'] ?? '--'}',
+      'Reconnects: ${_stats['retries'] ?? active['retries'] ?? '--'}',
+      'FPS từng phiên native (các mẫu lúc có decoder):',
+      ..._sessionSummaryLines(),
+      'Nhật ký sự kiện RTSP/IJK gần nhất:',
+      ..._eventLogLines(),
       'Các mẫu FPS chỉ tính khi decoder tồn tại; SurfaceView mất không tính là khung rơi.',
       'LƯU Ý: CacheMs và firstFrameMs không phải độ trễ end-to-end.'
     ].join('\n');
+  }
+
+  List<String> _sessionSummaryLines() {
+    final sessions = _samples.map((s) => s.sessionId).where((id) => id > 0)
+        .toSet().toList()..sort();
+    if (sessions.isEmpty) return ['  Chưa có mẫu'];
+    return sessions.reversed.take(8).map((id) {
+      final samples = _samples.where((s) => s.sessionId == id).toList();
+      final x = LiveSummary.fromSamples(samples);
+      return '  Phiên $id: ${x.count} mẫu, FPS out='
+          '${x.avgOutputFps.toStringAsFixed(1)}, decode='
+          '${x.avgDecodeFps.toStringAsFixed(1)}, cache P95='
+          '${x.p95CacheMs}ms, FPS=0: ${x.lowOutputSamples}';
+    }).toList();
+  }
+
+  List<String> _eventLogLines() {
+    final raw = _stats['recentEvents'] ?? _lastActiveStats['recentEvents'];
+    if (raw is! List) return ['  Chưa có dữ liệu sự kiện'];
+    final recent = raw.whereType<Map>().toList();
+    if (recent.isEmpty) return ['  Chưa ghi nhận sự kiện'];
+    return recent.reversed.take(20).map((e) {
+      final ms = (e['elapsedMs'] as num?)?.toInt() ?? 0;
+      return '  +${(ms / 1000).toStringAsFixed(1)}s '
+          'P${e['session'] ?? '-'} '
+          '${e['type'] ?? '?'}: ${e['detail'] ?? ''}';
+    }).toList();
   }
 
   Future<void> _copyDiagnostics() async {
@@ -457,6 +491,7 @@ class _LiveScreenState extends State<LiveScreen> {
               Chip(label: Text('FPS decode: ${_displayNum('decodeFps')}')),
               Chip(label: Text('Decoder: ${(_lastActiveStats.isNotEmpty ? _lastActiveStats : _stats)['decoder'] ?? '--'}')),
               Chip(label: Text('Surface mất: $_surfaceLostEvents')),
+              Chip(label: Text('Phiên IJK: ${_stats['currentSession'] ?? 0}')),
               Chip(label: Text('Gói đệm: ${(_lastActiveStats.isNotEmpty ? _lastActiveStats : _stats)['cachedPackets'] ?? '--'}')),
               Chip(label: Text('Frame đầu: ${_displayNum('firstFrameMs', decimals: 0)} ms')),
               Chip(label: Text('Video: ${_displayNum('videoWidth', decimals: 0)} × ${_displayNum('videoHeight', decimals: 0)}')),
@@ -465,6 +500,8 @@ class _LiveScreenState extends State<LiveScreen> {
               Chip(label: Text('Đệm: ${_displayNum('cachedMs', decimals: 0)} ms')),
               Chip(label: Text('Buffer: ${_stats['bufferEvents'] ?? 0}')),
               Chip(label: Text('Nối lại: ${_stats['retries'] ?? 0}')),
+              if ((_stats['lastReconnectReason'] as String? ?? '').isNotEmpty)
+                Text('Lần nối lại gần nhất: ${_stats['lastReconnectReason']}'),
             ]),
             const SizedBox(height: 12),
             Text('Báo cáo độ trễ và giải mã',

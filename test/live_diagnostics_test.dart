@@ -15,10 +15,12 @@ void main() {
       'decodeFps': 29.5,
       'outputFps': 30,
       'cachedMs': 160,
-      'cachedPackets': 7
+      'cachedPackets': 7,
+      'currentSession': 3,
     });
     expect(s.outputFps, 30);
     expect(s.cachedPackets, 7);
+    expect(s.sessionId, 3);
     expect(s.cachedMs, 160);
     expect(s.time, t);
   });

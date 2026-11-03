@@ -138,3 +138,20 @@ Changes:
 - Ignore non-playing, non-decoding time with no video dimensions in mean FPS calculations, rather than labeling view destruction as video frame drops.
 - Keep V1.4 IJK options and RTSP host/path unchanged. This release addresses UI lifecycle, not the remaining ~3 seconds of real-world sensor-to-screen delay.
 - No new stabilizer, frame filters, frame copying or network uploading.
+
+
+## V1.6 – Diagnose the four reconnects without changing proven playback
+
+A500S field test (2026-11-03 21:52): 163 s uptime, `Surface lost 0`, 158 FPS samples, MediaCodec 640x480, FPS decode 22.0/output 21.3 mean, queue P95 6 ms, 0 IJK buffer-start notifications, 4 reconnects, approx 3-second scene-to-screen delay.
+
+The 4 reconnects are not explained by Surface destruction or IJK buffer events. They may represent RTSP errors, server session timeouts, missing frames, or other native failures. Do **not** infer an exact root cause without native event codes and their timings.
+
+V1.6 only changes diagnostics:
+- Record a 48-entry native in-memory event ring with elapsed time and session ID. Every reconnect stores the pre-release native state, session age, active-video age, FPS, IJK video cache and original IJK error or watchdog reason.
+- Count native session attempts and successful first-frame sessions. Summarize decoder FPS and cached duration **per session** to avoid averaging reconnect downtime with steady playback.
+- Expose native reconnect reason and session ID in the Flutter UI; copied report includes the last 20 timed events and last eight per-session summaries.
+- Keep all video decode, MediaCodec, RTSP, player buffering, network binding, rendering and reconnect policies **identical to V1.5.1**. No additional polling/RTSP requests.
+- Logging is local only; clipboard report is shared only by explicit user action.
+- Continue using parked-vehicle tests. A three-second-delayed live image cannot reliably serve as the sole input to collision avoidance or safety-critical decisions.
+
+Next: collect a 5-10-minute V1.6 report. If reconnects occur at near-regular intervals, investigate server RTSP keepalive/Session timeout; if associated with a particular IJK error, address that code. If no reconnects and a persistent ~3-second lag remains, investigate encoder-side buffering and RTP/PTS timing, not IJK cached packet duration alone.
