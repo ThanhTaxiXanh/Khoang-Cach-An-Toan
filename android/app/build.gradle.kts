@@ -33,6 +33,14 @@ android {
             // so future test APK upgrades may need uninstall/reinstall.
             // Production releases MUST use a persistent, private release key.
             signingConfig = signingConfigs.getByName("debug")
+            // JNI must see original Java class/member descriptors.
+            // Flutter release enables R8 shrinking: keep IJK's JNI surface.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }

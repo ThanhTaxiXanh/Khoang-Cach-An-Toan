@@ -68,6 +68,10 @@ class _LiveScreenState extends State<LiveScreen> {
     setState(() {
       _state = event['state'] as String? ?? _state;
       _message = event['message'] as String? ?? _message;
+      if (_state == 'native_error') {
+        _requested = false;
+        _busy = false;
+      }
     });
   }
 

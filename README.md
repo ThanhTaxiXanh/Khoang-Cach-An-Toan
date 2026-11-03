@@ -55,3 +55,15 @@ Các artifact ban đầu từ build #13/#14 có thể **chưa được ký số*
 - Dành cho điện thoại ARM64: cài `app-arm64-v8a-release.apk`; ARM32: `app-armeabi-v7a-release.apk`. Không phát hành APK x86_64 vì gói IJKPlayer gốc đang cấu hình không có thư viện native x86_64.
 - Vì khóa debug của GitHub Actions thay đổi theo runner, có thể cần **gỡ ứng dụng test cũ trước khi cài bản mới** nếu hệ điều hành báo không thể cập nhật do chữ ký khác nhau. Gỡ ứng dụng sẽ xóa dữ liệu ứng dụng lưu cục bộ. Đừng gỡ nếu đang có dữ liệu quan trọng chưa sao lưu.
 - Cấu hình ký kiểu debug chỉ dùng cho **APK thử nghiệm nội bộ**; bản phát hành chính thức phải ký bằng keystore riêng, bảo quản an toàn (ví dụ GitHub Actions Secrets). Chữ ký hợp lệ không chứng minh video RTSP đã hoạt động trên A500S.
+
+
+## JNI_OnLoad failed on `libijksdl.so` (A500S live test, 03/11/2026)
+
+- Symptom: screen black; `JNI_OnLoad failed on a previous attempt to load libijksdl.so`; identical with RTSP TCP/UDP, FPS decode 0.
+- This failure happens while initializing IJK native libraries **before** any RTSP negotiation. Testing `/livestream/13` or changing transport cannot fix it.
+- Most likely fault: R8 obfuscating/removing classes accessed via JNI's `FindClass`, `GetMethodID` or `RegisterNatives` in the original IJK 0.8.8 native binary.
+- Mitigation V1.1.2: add broad IJK `-keep` rules (including all JNI fields/methods), configure release `proguardFiles`, verify post-R8 DEX descriptors for `IjkMediaPlayer`, `IMediaDataSource`, `IAndroidIO`.
+- Kotlin now treats a `LinkageError` as **fatal for this process**, stops RTSP reconnection and displays an actionable message. Network binding is released.
+- **Evidence required before calling this fixed:** install the new ABI-matched APK on the same phone, open the player and verify no further `JNI_OnLoad` errors. CI build success only validates compilation, signing and DEX packaging; it cannot run your 70mai hardware.
+- Diagnostic if persistent: Android `logcat` immediately before the *first* `JNI_OnLoad` failure, especially `J4A`, `NoSuchMethodError`, `NoSuchFieldError`, `UnsatisfiedLinkError` or unsupported library linkage.
+- Original IJKPlayer issue: https://github.com/bilibili/ijkplayer/issues/1656

@@ -44,6 +44,8 @@ class IjkSurfaceView(
     private var attemptStartedAt = 0L
     private var bufferStartedAt = 0L
     private var renderingStarted = false
+    // Linker/JNI failure is process-local and cannot be fixed by RTSP retry.
+    private var fatalNativeMessage: String? = null
 
     private val watchdog = object : Runnable {
         override fun run() {
@@ -80,6 +82,10 @@ class IjkSurfaceView(
 
     fun open(streamUrl: String, streamTransport: String, bufferProfile: String) {
         check(!disposed) { "Surface đã bị đóng" }
+        fatalNativeMessage?.let {
+            signal("native_error", it)
+            return
+        }
         require(streamUrl.startsWith("rtsp://", ignoreCase = true))
         require(streamTransport == "tcp" || streamTransport == "udp")
         require(bufferProfile in listOf("low", "balanced", "smooth"))
@@ -149,6 +155,17 @@ class IjkSurfaceView(
             newPlayer.setScreenOnWhilePlaying(true)
             newPlayer.setDataSource(targetUrl)
             newPlayer.prepareAsync()
+        } catch (error: LinkageError) {
+            // JNI_OnLoad, NoSuchMethodError, UnsatisfiedLinkError etc are
+            // permanent within the current app process. Stop retry loops.
+            val reason = "IJK JNI không tương thích: ${error.javaClass.simpleName}: ${error.message ?: "không có chi tiết"}. " +
+                "Dừng tự nối lại. Đóng hẳn ứng dụng rồi mở lại sau khi cập nhật APK."
+            fatalNativeMessage = reason
+            requested = false
+            retryPending = false
+            releasePlayer()
+            android.util.Log.e("TTX-IJK", "Fatal IJK native/JNI initialization error", error)
+            signal("native_error", reason)
         } catch (error: Throwable) {
             scheduleReconnect("Không khởi tạo được IJK: ${error.message}")
         }

@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - feature/a500s-live-rtsp-v1
     paths:
       - "lib/**"
       - "android/**"
@@ -68,11 +67,29 @@ jobs:
                 exit 1
               fi
             done
+            # R8 can silently rename JNI-referenced Java classes: verify
+            # original DEX descriptors are present after release shrink.
+            python3 - "$apk" <<'PY'
+          import sys, zipfile
+          apk = sys.argv[1]
+          expected = [
+              b"Ltv/danmaku/ijk/media/player/IjkMediaPlayer;",
+              b"Ltv/danmaku/ijk/media/player/misc/IMediaDataSource;",
+              b"Ltv/danmaku/ijk/media/player/misc/IAndroidIO;",
+          ]
+          with zipfile.ZipFile(apk) as z:
+              dex = b"".join(z.read(p) for p in z.namelist() if p.endswith(".dex"))
+          assert dex, f"No DEX files found in {apk}"
+          absent = [c.decode() for c in expected if c not in dex]
+          if absent:
+              raise SystemExit(f"FATAL: IJK JNI classes renamed/stripped in {apk}: {absent}")
+          print("PASS: IJK JNI class descriptors retained in", apk)
+          PY
           done
       - name: Upload APKs
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: TTX-A500S-IJKPlayer-SIGNED-TEST-APK
+          name: TTX-A500S-IJKPlayer-JNI-FIX-APK
           path: build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error

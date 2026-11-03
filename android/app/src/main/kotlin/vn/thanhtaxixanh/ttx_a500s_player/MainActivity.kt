@@ -24,7 +24,10 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
 
         factory = IjkViewFactory(this) { payload ->
-            mainHandler.post { eventSink?.success(payload) }
+            mainHandler.post {
+                if (payload["state"] == "native_error") restoreNetwork()
+                eventSink?.success(payload)
+            }
         }
         flutterEngine.platformViewsController.registry.registerViewFactory(
             "vn.thanhtaxixanh.a500s/ijk_surface",
