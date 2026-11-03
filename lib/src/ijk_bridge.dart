@@ -21,10 +21,13 @@ class IjkBridge {
 
   /// Sends read-only RTSP OPTIONS/DESCRIBE to the camera over its Wi-Fi network.
   /// No authentication bypass or private control endpoint is involved.
-  static Future<Map<String, dynamic>> probeRtsp(String url) async {
+  static Future<Map<String, dynamic>> probeRtsp(
+    String url,
+    String transport,
+  ) async {
     final data = await _control.invokeMapMethod<String, dynamic>(
       'probeRtsp',
-      <String, dynamic>{'url': url},
+      <String, dynamic>{'url': url, 'transport': transport},
     );
     return data ?? <String, dynamic>{};
   }

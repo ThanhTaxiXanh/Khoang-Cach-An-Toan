@@ -121,19 +121,28 @@ class _LiveScreenState extends State<LiveScreen> {
     }
     setState(() {
       _probing = true;
-      _probeReport = 'Đang kiểm tra TCP/RTSP bằng mạng Wi-Fi của camera...';
+      _probeReport = 'Đang kiểm tra RTSP/SETUP/PLAY và lấy mẫu RTP...';
     });
     try {
-      final data = await IjkBridge.probeRtsp(config.url);
+      final data = await IjkBridge.probeRtsp(config.url, _transport.value);
       if (!mounted) return;
       final lines = <String>[
-        'TCP: ${data['tcp'] ?? '--'}',
+        'Kết nối: ${data['tcp'] ?? '--'}',
+        'Transport: ${data['transport'] ?? '--'}',
         'OPTIONS: ${data['options'] ?? '--'}',
         'DESCRIBE: ${data['describe'] ?? '--'}',
         'Content-Type: ${data['contentType'] ?? '--'}',
         'Content-Base: ${data['contentBase'] ?? '--'}',
         'Codec: ${data['codec'] ?? '--'}',
         'Track: ${data['track'] ?? '--'}',
+        'SETUP URL: ${data['setupUrl'] ?? '--'}',
+        'SETUP: ${data['setup'] ?? '--'}',
+        'Transport server: ${data['serverTransport'] ?? '--'}',
+        'Session: ${data['session'] ?? '--'}',
+        'PLAY: ${data['play'] ?? '--'}',
+        'RTP packets / 5s: ${data['rtpPackets'] ?? '--'}',
+        'RTP bytes / 5s: ${data['rtpBytes'] ?? '--'}',
+        'Có IDR H.264: ${data['idrSeen'] == true ? "Có" : "Chưa thấy"}',
       ];
       final error = data['error'];
       if (error != null && error.toString().isNotEmpty) {
@@ -330,10 +339,15 @@ class _LiveScreenState extends State<LiveScreen> {
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
-              onPressed: _probing ? null : _probeRtsp,
+              onPressed: (_probing || _requested || _busy) ? null : _probeRtsp,
               icon: const Icon(Icons.network_check),
-              label: Text(_probing ? 'Đang kiểm tra RTSP...' : 'Kiểm tra RTSP (OPTIONS / DESCRIBE)'),
+              label: Text(_probing ? 'Đang đo RTP...' : 'Kiểm tra RTSP đầy đủ (SETUP/PLAY/RTP)'),
             ),
+            if (_requested)
+              const Text(
+                'Nhấn Dừng phát trước khi kiểm tra RTSP để tránh hai phiên cùng lúc.',
+                style: TextStyle(fontSize: 12),
+              ),
             if (_probeReport.isNotEmpty) ...[
               const SizedBox(height: 8),
               SelectableText(_probeReport, style: const TextStyle(fontSize: 12)),

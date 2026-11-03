@@ -191,19 +191,19 @@ class IjkSurfaceView(
         p.setOption(
             IjkMediaPlayer.OPT_CATEGORY_PLAYER,
             "packet-buffering",
-            if (low) 0L else 1L
+            0L // Live RTSP: avoid an indefinite IJK packet buffering gate
         )
         p.setOption(
             IjkMediaPlayer.OPT_CATEGORY_PLAYER,
             "min-frames",
-            if (low) 2L else if (smooth) 10L else 5L
+            if (low) 2L else if (smooth) 8L else 4L
         )
         p.setOption(
             IjkMediaPlayer.OPT_CATEGORY_PLAYER,
             "max_cached_duration",
             if (low) 250L else if (smooth) 900L else 500L
         )
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", if (low) 0L else 1L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 1L)
     }
 
     private fun scheduleReconnect(reason: String) {

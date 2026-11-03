@@ -1,4 +1,4 @@
-name: Android IJKPlayer RTSP APK
+name: Android IJKPlayer A500S RTSP Probe APK
 
 on:
   workflow_dispatch:
@@ -90,6 +90,6 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: TTX-A500S-IJKPlayer-RTSP-V1-2-APK
+          name: TTX-A500S-IJKPlayer-RTSP-V1-3-APK
           path: build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error

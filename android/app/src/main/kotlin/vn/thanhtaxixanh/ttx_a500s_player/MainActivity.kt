@@ -54,13 +54,14 @@ class MainActivity : FlutterActivity() {
                 "wifiStatus" -> result.success(wifiStatus())
                 "probeRtsp" -> {
                     val url = call.argument<String>("url")
+                    val transport = call.argument<String>("transport") ?: "tcp"
                     val wifi = cameraWifi()
                     if (url == null || wifi == null) {
                         result.error("NO_WIFI", "Kết nối Wi-Fi 70mai trước khi kiểm tra RTSP", null)
                     } else {
                         // Do not probe network on Flutter/UI thread.
                         Thread {
-                            val outcome = RtspProbe(wifi).check(url)
+                            val outcome = RtspProbe(wifi).check(url, transport)
                             mainHandler.post {
                                 result.success(outcome)
                             }

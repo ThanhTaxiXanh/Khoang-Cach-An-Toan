@@ -81,3 +81,17 @@ Các artifact ban đầu từ build #13/#14 có thể **chưa được ký số*
 - Báo cáo `DESCRIBE 200` của A500S và `Content-Base` mang mã phiên động không có nghĩa `/livestream/12` sai: dùng URL ban đầu để DESCRIBE, xử lý Content-Base ở trình phát RTSP.
 - Kiểm tra camera trực tiếp sau khi dừng xe an toàn. Gỡ bản cài có chữ ký khác nếu Android từ chối cập nhật; sao lưu dữ liệu trước khi gỡ.
 - Cần xác nhận mã từ CI và trên A500S vật lý; không đánh đồng APK build success với video chạy được.
+
+
+## V1.3 – RTSP session diagnostic (A500S, 03/11/2026)
+
+Camera screenshots prove `OPTIONS 200`, `DESCRIBE 200`, dynamic `Content-Base` (e.g. `/0000000C/`, `/00000012/`), and `a=control:track1`. These responses alone do **not** prove `SETUP`/`PLAY` or RTP payload was received.
+
+- The probe now uses a **single RTSP connection** for OPTIONS, DESCRIBE, SETUP and PLAY, derives the track URL from the **current** `Content-Base` and SDP `a=control`, and captures up to 5 seconds of RTP data over **selected TCP or UDP**.
+- For UDP the app reserves a consecutive even/odd RTP/RTCP port pair on the camera Wi-Fi network. For TCP, it reads RTSP interleaved RTP on channel 0.
+- Displays SETUP URL, selected and server transports, RTSP response codes, frame codec as `a=rtpmap:96 H264/90000`, whether an RTSP Session was issued, packet/byte counts and whether H.264 IDR was seen.
+- Attempts TEARDOWN of the short diagnostic session. **Stop playback before running the probe**: the camera may not allow concurrent RTSP sessions.
+- For live playback IJK uses `packet-buffering=0` across profiles to prevent prolonged buffering start when stream is active, with frameskip still available. This is a test preset, not proof that all video stalls have been fixed.
+- If `SETUP` fails (461 etc.), test alternate transport; if `PLAY 200` but zero RTP, investigate camera session/firmware and Wi-Fi; if RTP arrives but IJK shows 0 FPS, focus on IJK demux, buffering or H.264 decoder.
+- Do not replace the original `/livestream/12` DESCRIBE URL with the dynamic `Content-Base`; the latter is scoped to a specific SDP session.
+- No recording, upload, auth bypass, or camera configuration writes. All probing is limited to the camera Wi-Fi network already joined by the user.
