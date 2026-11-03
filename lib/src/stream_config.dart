@@ -1,13 +1,20 @@
-/// A500S candidates must be verified against the actual device/firmware.
 enum PlaybackProfile {
-  lowLatency('Độ trễ thấp', 200),
-  balanced('Cân bằng', 450),
-  smooth('Ưu tiên mượt', 900);
+  lowLatency('Ưu tiên độ trễ thấp', 'low'),
+  balanced('Cân bằng', 'balanced'),
+  smooth('Ưu tiên ổn định', 'smooth');
 
-  const PlaybackProfile(this.label, this.cacheMs);
-
+  const PlaybackProfile(this.label, this.value);
   final String label;
-  final int cacheMs;
+  final String value;
+}
+
+enum RtspTransport {
+  tcp('TCP · truyền tin cậy', 'tcp'),
+  udp('UDP · thử khi TCP không phù hợp', 'udp');
+
+  const RtspTransport(this.label, this.value);
+  final String label;
+  final String value;
 }
 
 class StreamConfig {
@@ -15,15 +22,18 @@ class StreamConfig {
     required this.host,
     this.port = 554,
     this.path = '/livestream/12',
-    this.tcp = true,
+    this.transport = RtspTransport.tcp,
     this.profile = PlaybackProfile.balanced,
   });
 
   final String host;
   final int port;
   final String path;
-  final bool tcp;
+  final RtspTransport transport;
   final PlaybackProfile profile;
+
+  String get normalizedPath =>
+      path.startsWith('/') ? path.trim() : '/${path.trim()}';
 
   String get url => Uri(
         scheme: 'rtsp',
@@ -32,41 +42,21 @@ class StreamConfig {
         path: normalizedPath,
       ).toString();
 
-  String get normalizedPath =>
-      path.trim().startsWith('/') ? path.trim() : '/${path.trim()}';
-
   String? get validationError {
-    final name = host.trim();
-    if (name.isEmpty) return 'Nhập IP hoặc hostname của camera.';
-    if (name.contains(RegExp(r'[/\\\s:@?#]'))) {
-      return 'Host không hợp lệ (không chứa URL hoặc ký tự đặc biệt).';
+    final h = host.trim();
+    if (h.isEmpty || h.contains(RegExp(r'[/\\\s:@?#]'))) {
+      return 'IP camera phải là địa chỉ IP hoặc hostname hợp lệ.';
     }
-    if (Uri.tryParse('rtsp://$name')?.host.isEmpty ?? true) {
-      return 'Địa chỉ camera không hợp lệ.';
+    if (Uri.tryParse('rtsp://$h')?.host.isEmpty ?? true) {
+      return 'Không phân tích được địa chỉ camera.';
     }
-    if (port < 1 || port > 65535) return 'Cổng phải từ 1 đến 65535.';
-    if (!normalizedPath.startsWith('/') ||
+    if (port < 1 || port > 65535) return 'Cổng RTSP phải từ 1 đến 65535.';
+    if (normalizedPath == '/' ||
         normalizedPath.contains(' ') ||
         normalizedPath.contains('?') ||
-        normalizedPath.contains('#') ||
-        normalizedPath == '/') {
+        normalizedPath.contains('#')) {
       return 'Đường dẫn RTSP không hợp lệ.';
     }
     return null;
   }
-
-  StreamConfig copyWith({
-    String? host,
-    int? port,
-    String? path,
-    bool? tcp,
-    PlaybackProfile? profile,
-  }) =>
-      StreamConfig(
-        host: host ?? this.host,
-        port: port ?? this.port,
-        path: path ?? this.path,
-        tcp: tcp ?? this.tcp,
-        profile: profile ?? this.profile,
-      );
 }

@@ -1,7 +1,7 @@
 name: ttx_a500s_player
-description: "TTX 70mai A500S RTSP Live Viewer - Android"
+description: TTX A500S RTSP live video with native IJKPlayer and MediaCodec
 publish_to: none
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: '>=3.7.0 <4.0.0'
@@ -9,7 +9,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_vlc_player: 7.4.4
 
 dev_dependencies:
   flutter_test:
