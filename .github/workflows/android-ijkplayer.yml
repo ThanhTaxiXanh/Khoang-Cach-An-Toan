@@ -58,9 +58,12 @@ jobs:
             test -f "$apk"
             echo "Verifying Android APK: $apk"
             "$apksigner" verify --verbose --print-certs "$apk"
-            "$aapt" dump badging "$apk" | head -n 5
+            "$aapt" dump badging "$apk" > "$RUNNER_TEMP/aapt-${abi}.txt"
+            sed -n '1,5p' "$RUNNER_TEMP/aapt-${abi}.txt"
+            grep -q "^package: name='vn.thanhtaxixanh.ttx_a500s_player'" "$RUNNER_TEMP/aapt-${abi}.txt"
+            unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-${abi}-files.txt"
             for lib in libijkplayer.so libijkffmpeg.so libijksdl.so; do
-              if ! unzip -Z1 "$apk" | grep -q "^lib/$abi/$lib$"; then
+              if ! grep -Fxq "lib/$abi/$lib" "$RUNNER_TEMP/apk-${abi}-files.txt"; then
                 echo "Missing native library lib/$abi/$lib in $apk"
                 exit 1
               fi
