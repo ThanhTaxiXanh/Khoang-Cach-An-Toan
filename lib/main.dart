@@ -252,7 +252,7 @@ class _LiveScreenState extends State<LiveScreen> {
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<RtspTransport>(
-              value: _transport,
+              initialValue: _transport,
               decoration: const InputDecoration(
                   labelText: 'Giao thức', border: OutlineInputBorder()),
               items: RtspTransport.values
@@ -266,7 +266,7 @@ class _LiveScreenState extends State<LiveScreen> {
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<PlaybackProfile>(
-              value: _profile,
+              initialValue: _profile,
               decoration: const InputDecoration(
                   labelText: 'Hồ sơ bộ đệm', border: OutlineInputBorder()),
               items: PlaybackProfile.values
