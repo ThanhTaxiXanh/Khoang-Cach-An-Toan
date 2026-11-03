@@ -1,0 +1,20 @@
+name: ttx_a500s_player
+description: "TTX 70mai A500S RTSP Live Viewer - Android"
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.7.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_vlc_player: 7.4.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
