@@ -23,6 +23,18 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
+
+    buildTypes {
+        getByName("release") {
+            // TEST INSTALLATION ONLY: the previous release APK was unsigned
+            // and Android rejected it as an invalid package.
+            // Use the Android debug signing key for immediately installable
+            // QA builds. Each CI runner generates its own ephemeral key,
+            // so future test APK upgrades may need uninstall/reinstall.
+            // Production releases MUST use a persistent, private release key.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
 }
 
 flutter {

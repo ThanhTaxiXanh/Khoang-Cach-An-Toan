@@ -46,3 +46,12 @@ Quy trình GitHub Actions tự tạo Android Flutter scaffold, kiểm tra `flutt
 ## Tài liệu giao thức
 
 Xem `docs/70mai-a500s-protocol.md`. Mã nguồn tuân thủ nguyên tắc **không vượt ghép đôi/ủy quyền**, không sao chép thư viện đóng gói của ứng dụng gốc.
+
+
+## Khắc phục lỗi Android báo «gói không hợp lệ» (03/11/2026)
+
+Các artifact ban đầu từ build #13/#14 có thể **chưa được ký số** vì Gradle không khai báo signing config cho `release`. Dù CI báo Success, Android không cài đặt được APK unsigned. Bản `1.1.1+3` khắc phục bằng **chữ ký Android debug dành riêng cho TEST** khi biên dịch `release`. CI bây giờ chạy `apksigner verify` cho từng APK và kiểm tra bộ thư viện IJKPlayer native nằm đúng thư mục ABI, rồi mới upload artifact `TTX-A500S-IJKPlayer-SIGNED-TEST-APK`.
+
+- Dành cho điện thoại ARM64: cài `app-arm64-v8a-release.apk`; ARM32: `app-armeabi-v7a-release.apk`. Không phát hành APK x86_64 vì gói IJKPlayer gốc đang cấu hình không có thư viện native x86_64.
+- Vì khóa debug của GitHub Actions thay đổi theo runner, có thể cần **gỡ ứng dụng test cũ trước khi cài bản mới** nếu hệ điều hành báo không thể cập nhật do chữ ký khác nhau. Gỡ ứng dụng sẽ xóa dữ liệu ứng dụng lưu cục bộ. Đừng gỡ nếu đang có dữ liệu quan trọng chưa sao lưu.
+- Cấu hình ký kiểu debug chỉ dùng cho **APK thử nghiệm nội bộ**; bản phát hành chính thức phải ký bằng keystore riêng, bảo quản an toàn (ví dụ GitHub Actions Secrets). Chữ ký hợp lệ không chứng minh video RTSP đã hoạt động trên A500S.

@@ -43,11 +43,33 @@ jobs:
       - name: Unit tests
         run: flutter test
       - name: Assemble release APK
-        run: flutter build apk --release --split-per-abi
+        run: flutter build apk --release --target-platform android-arm,android-arm64 --split-per-abi
+      - name: Verify signed APK and IJKPlayer native libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_tools="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          apksigner="$build_tools/apksigner"
+          aapt="$build_tools/aapt"
+          test -x "$apksigner"
+          test -x "$aapt"
+          for abi in arm64-v8a armeabi-v7a; do
+            apk="build/app/outputs/flutter-apk/app-${abi}-release.apk"
+            test -f "$apk"
+            echo "Verifying Android APK: $apk"
+            "$apksigner" verify --verbose --print-certs "$apk"
+            "$aapt" dump badging "$apk" | head -n 5
+            for lib in libijkplayer.so libijkffmpeg.so libijksdl.so; do
+              if ! unzip -Z1 "$apk" | grep -q "^lib/$abi/$lib$"; then
+                echo "Missing native library lib/$abi/$lib in $apk"
+                exit 1
+              fi
+            done
+          done
       - name: Upload APKs
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: TTX-A500S-IJKPlayer-APK
+          name: TTX-A500S-IJKPlayer-SIGNED-TEST-APK
           path: build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error
