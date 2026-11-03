@@ -291,6 +291,17 @@ class IjkSurfaceView(
             catch (_: Throwable) { 0L }
         val tcpSpeed = try { current?.tcpSpeed ?: 0L }
             catch (_: Throwable) { 0L }
+        val cachedPackets = try { current?.videoCachedPackets ?: 0L }
+            catch (_: Throwable) { 0L }
+        val cachedBytes = try { current?.videoCachedBytes ?: 0L }
+            catch (_: Throwable) { 0L }
+        val decoder = try {
+            when (current?.videoDecoder ?: IjkMediaPlayer.FFP_PROPV_DECODER_UNKNOWN) {
+                IjkMediaPlayer.FFP_PROPV_DECODER_MEDIACODEC -> "MediaCodec"
+                IjkMediaPlayer.FFP_PROPV_DECODER_AVCODEC -> "FFmpeg/AVCodec"
+                else -> "Chưa xác định"
+            }
+        } catch (_: Throwable) { "Chưa xác định" }
         return mapOf(
             "decodeFps" to decodeFps,
             "outputFps" to outputFps,
@@ -300,6 +311,9 @@ class IjkSurfaceView(
             "retries" to retryEvents,
             "state" to currentState,
             "hardwareRequested" to true,
+            "decoder" to decoder,
+            "cachedPackets" to cachedPackets,
+            "cachedBytes" to cachedBytes,
             "firstFrameMs" to firstFrameStartupMs,
             "videoWidth" to (current?.videoWidth ?: 0),
             "videoHeight" to (current?.videoHeight ?: 0)

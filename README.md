@@ -112,3 +112,17 @@ Settings apply only after stopping and reopening playback. If the experimental p
 ### Repeatable latency test (parked vehicle)
 
 With a second phone recording both the dashcam's own live preview and the TTX phone in one shot, make a clear hand movement in view. Measure the time between the same visual event on both displays. Repeat at 0, 2 and 10 minutes for baseline and experimental, using the same transport. Note lag (seconds), FPS output, reconnect and buffering counts. **Camera screen may itself be delayed; this measures the gap between the two displays, not necessarily sensor-to-phone latency.**
+
+
+## V1.5 – Diagnose a fixed ~3-second delay, WITHOUT changing working playback
+
+On-device test report: V1.4 plays smoothly for minutes without freezing, but the observed lag remains about 3 seconds across TCP/UDP and all four buffering presets. This strongly reduces the likelihood that the preset network/packet buffer is the sole source of delay. A camera-side encoder pipeline, RTP timestamps, decoder scheduling or the reference display may be responsible. No causal conclusion yet.
+
+Changes:
+- **All V1.4 IJK playback options are UNCHANGED.** This version is safe to compare against the already working baseline.
+- Native metrics: actual decoder backend (MediaCodec vs FFmpeg/AVCodec), IJK video queued packet count and cached byte count, alongside existing FPS/cache metrics.
+- Flutter gathers at most 600 one-second samples (10 minutes), computes average FPS and cache maximum/P95; does NOT copy raw video frames.
+- The user can manually record observed lag, select its reference (scene, camera screen, official 70mai app) and tap **Sao chép báo cáo IJKPlayer**. Clipboard only; no remote logging.
+- A first-frame start time is NOT end-to-end latency, and queue duration is only one subset of the total delay.
+- Next step: compare measured lag and queue occupancy. If displayed image lags 3 s while the IJK queue is short, further adjustment of `min-frames` / `max_cached_duration` alone is unlikely to solve it; investigate camera encoder/GOP, RTP PTS and external reference.
+- Never use ~3 s delayed feed as the only input for live collision warnings. Test while parked.

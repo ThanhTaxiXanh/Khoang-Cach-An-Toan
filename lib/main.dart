@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'src/ijk_bridge.dart';
+import 'src/live_diagnostics.dart';
 import 'src/ijk_surface.dart';
 import 'src/stream_config.dart';
 
@@ -54,6 +55,10 @@ class _LiveScreenState extends State<LiveScreen> {
   Map<String, dynamic> _stats = <String, dynamic>{};
   bool _probing = false;
   String _probeReport = '';
+  final List<LiveSample> _samples = <LiveSample>[];
+  DateTime? _runStartedAt;
+  final _observedLag = TextEditingController(text: '3');
+  String _reference = 'Chưa xác định nguồn so sánh';
 
   @override
   void initState() {
@@ -97,7 +102,14 @@ class _LiveScreenState extends State<LiveScreen> {
     if (!_requested || id == null || _busy) return;
     try {
       final stats = await IjkBridge.stats(id);
-      if (mounted && id == _viewId) setState(() => _stats = stats);
+      if (mounted && id == _viewId) {
+        // Only 1 sample per second; no video frame traverses Dart.
+        _samples.add(LiveSample.fromNative(DateTime.now(), stats));
+        if (_samples.length > 600) {
+          _samples.removeRange(0, _samples.length - 600);
+        }
+        setState(() => _stats = stats);
+      }
     } catch (_) {
       // Keep the control UI responsive if the native view has been disposed.
     }
@@ -182,6 +194,9 @@ class _LiveScreenState extends State<LiveScreen> {
     setState(() {
       _busy = true;
       _requested = true;
+      _samples.clear();
+      _stats = <String, dynamic>{};
+      _runStartedAt = DateTime.now();
       _message = 'Đang yêu cầu IJKPlayer mở RTSP...';
     });
     try {
@@ -233,6 +248,7 @@ class _LiveScreenState extends State<LiveScreen> {
     _host.dispose();
     _port.dispose();
     _path.dispose();
+    _observedLag.dispose();
     super.dispose();
   }
 
@@ -240,6 +256,47 @@ class _LiveScreenState extends State<LiveScreen> {
     final v = _stats[key];
     if (v is num) return v.toStringAsFixed(decimals);
     return '--';
+  }
+
+  String _diagnosticReport() {
+    final summary = LiveSummary.fromSamples(_samples);
+    final elapsed = _runStartedAt == null
+        ? 'chưa phát'
+        : '${DateTime.now().difference(_runStartedAt!).inSeconds} giây';
+    final lag = _observedLag.text.trim();
+    return [
+      'TTX A500S Live - IJKPlayer V1.5',
+      'Thời gian: ${DateTime.now().toIso8601String()}',
+      'RTSP: ${_host.text}:${_port.text}${_path.text}',
+      'Transport: ${_transport.value}; profile: ${_profile.value}',
+      'Trạng thái: $_state; thời lượng phát: $elapsed',
+      'Trễ quan sát: ${lag.isEmpty ? "chưa ghi" : "$lag giây"}',
+      'So sánh với: $_reference',
+      'Decoder thực tế: ${_stats['decoder'] ?? '--'}',
+      'Yêu cầu MediaCodec: ${_stats['hardwareRequested'] ?? false}',
+      'Video: ${_stats['videoWidth'] ?? '--'}x${_stats['videoHeight'] ?? '--'}',
+      'Thời gian frame đầu: ${_stats['firstFrameMs'] ?? '--'} ms',
+      'Số mẫu (tối đa 600): ${summary.count}',
+      'FPS output trung bình: ${summary.avgOutputFps.toStringAsFixed(1)}',
+      'FPS decode trung bình: ${summary.avgDecodeFps.toStringAsFixed(1)}',
+      'Số mẫu FPS output dưới 0.5: ${summary.lowOutputSamples}',
+      'IJK video cache max: ${summary.maxCacheMs} ms',
+      'IJK video cache P95: ${summary.p95CacheMs} ms',
+      'Gói video đang đệm: ${_stats['cachedPackets'] ?? '--'}',
+      'Bytes video đang đệm: ${_stats['cachedBytes'] ?? '--'}',
+      'Buffer events: ${_stats['bufferEvents'] ?? '--'}',
+      'Reconnects: ${_stats['retries'] ?? '--'}',
+      'LƯU Ý: CacheMs và firstFrameMs không phải độ trễ end-to-end.'
+    ].join('\n');
+  }
+
+  Future<void> _copyDiagnostics() async {
+    await Clipboard.setData(ClipboardData(text: _diagnosticReport()));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã sao chép báo cáo IJKPlayer.')),
+      );
+    }
   }
 
   @override
@@ -364,6 +421,8 @@ class _LiveScreenState extends State<LiveScreen> {
             Wrap(spacing: 7, runSpacing: 4, children: [
               Chip(label: Text('Trạng thái: $_state')),
               Chip(label: Text('FPS decode: ${_displayNum('decodeFps')}')),
+              Chip(label: Text('Decoder: ${_stats['decoder'] ?? '--'}')),
+              Chip(label: Text('Gói đệm: ${_stats['cachedPackets'] ?? '--'}')),
               Chip(label: Text('Frame đầu: ${_displayNum('firstFrameMs', decimals: 0)} ms')),
               Chip(label: Text('Video: ${_displayNum('videoWidth', decimals: 0)} × ${_displayNum('videoHeight', decimals: 0)}')),
               Chip(label: Text('FPS output: ${_displayNum('outputFps')}')),
@@ -372,6 +431,41 @@ class _LiveScreenState extends State<LiveScreen> {
               Chip(label: Text('Buffer: ${_stats['bufferEvents'] ?? 0}')),
               Chip(label: Text('Nối lại: ${_stats['retries'] ?? 0}')),
             ]),
+            const SizedBox(height: 12),
+            Text('Báo cáo độ trễ và giải mã',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _observedLag,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Độ trễ quan sát (giây)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              initialValue: _reference,
+              decoration: const InputDecoration(
+                labelText: 'So với nguồn nào?',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                'Chưa xác định nguồn so sánh',
+                'Cảnh thực tế trước xe',
+                'Màn hình camera hành trình',
+                'Ứng dụng 70mai chính thức',
+              ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                if (v != null) setState(() => _reference = v);
+              },
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _copyDiagnostics,
+              icon: const Icon(Icons.copy),
+              label: const Text('Sao chép báo cáo IJKPlayer (10 phút gần nhất)'),
+            ),
             const SizedBox(height: 10),
             const Text(
               'Chế độ Thử trễ tối thiểu là thử nghiệm, dễ mất frame khi Wi-Fi yếu. '
