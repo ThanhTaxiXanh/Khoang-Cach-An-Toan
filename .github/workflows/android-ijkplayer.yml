@@ -1,0 +1,53 @@
+name: Android IJKPlayer APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - feature/a500s-live-rtsp-v1
+    paths:
+      - "lib/**"
+      - "android/**"
+      - "pubspec.yaml"
+      - "test/**"
+      - ".github/workflows/android-ijkplayer.yml"
+  pull_request:
+    paths:
+      - "lib/**"
+      - "android/**"
+      - "pubspec.yaml"
+      - "test/**"
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Prepare Android scaffold
+        run: |
+          flutter create --platforms=android --org vn.thanhtaxixanh --project-name ttx_a500s_player .
+          flutter pub get
+      - name: Static analysis
+        run: flutter analyze
+      - name: Unit tests
+        run: flutter test
+      - name: Assemble release APK
+        run: flutter build apk --release --split-per-abi
+      - name: Upload APKs
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TTX-A500S-IJKPlayer-APK
+          path: build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
