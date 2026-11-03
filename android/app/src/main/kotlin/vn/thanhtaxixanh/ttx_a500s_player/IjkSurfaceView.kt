@@ -161,7 +161,7 @@ class IjkSurfaceView(
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 700000L)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 32768L)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
+        if (low) p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1L)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1L)
         p.setOption(

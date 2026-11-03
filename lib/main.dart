@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'src/ijk_bridge.dart';
+import 'src/ijk_surface.dart';
 import 'src/stream_config.dart';
 
 void main() {
@@ -204,9 +205,8 @@ class _LiveScreenState extends State<LiveScreen> {
               aspectRatio: 16 / 9,
               child: DecoratedBox(
                 decoration: const BoxDecoration(color: Colors.black),
-                child: AndroidView(
-                  viewType: 'vn.thanhtaxixanh.a500s/ijk_surface',
-                  onPlatformViewCreated: (int id) {
+                child: IjkSurface(
+                  onCreated: (int id) {
                     if (!mounted) return;
                     setState(() => _viewId = id);
                   },
