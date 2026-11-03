@@ -44,6 +44,7 @@ class IjkSurfaceView(
     private var attemptStartedAt = 0L
     private var bufferStartedAt = 0L
     private var renderingStarted = false
+    private var firstFrameStartupMs: Long = 0L
     // Linker/JNI failure is process-local and cannot be fixed by RTSP retry.
     private var fatalNativeMessage: String? = null
 
@@ -88,7 +89,7 @@ class IjkSurfaceView(
         }
         require(streamUrl.startsWith("rtsp://", ignoreCase = true))
         require(streamTransport == "tcp" || streamTransport == "udp")
-        require(bufferProfile in listOf("low", "balanced", "smooth"))
+        require(bufferProfile in listOf("ultra", "low", "balanced", "smooth"))
         url = streamUrl
         transport = streamTransport
         profile = bufferProfile
@@ -107,6 +108,7 @@ class IjkSurfaceView(
         val targetUrl = url ?: return
         attemptStartedAt = SystemClock.elapsedRealtime()
         renderingStarted = false
+        firstFrameStartupMs = 0L
         signal("connecting", "IJKPlayer mở RTSP: $targetUrl")
         try {
             val newPlayer = IjkMediaPlayer()
@@ -122,6 +124,7 @@ class IjkSurfaceView(
                 when (what) {
                     IMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START -> {
                         renderingStarted = true
+                        firstFrameStartupMs = SystemClock.elapsedRealtime() - attemptStartedAt
                         retryAttempt = 0
                         bufferStartedAt = 0L
                         signal("playing", "Đã hiển thị khung hình trực tiếp")
@@ -172,13 +175,29 @@ class IjkSurfaceView(
     }
 
     private fun configure(p: IjkMediaPlayer) {
+        val ultra = profile == "ultra"
         val low = profile == "low"
         val smooth = profile == "smooth"
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", transport)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 700000L)
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 32768L)
+        // Baseline profiles preserve the V1.3 settings that played on A500S.
+        p.setOption(
+            IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration",
+            if (ultra) 150000L else 700000L
+        )
+        p.setOption(
+            IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize",
+            if (ultra) 8192L else 32768L
+        )
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1L)
-        if (low) p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
+        if (low || ultra) {
+            p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
+        }
+        if (ultra) {
+            // FFmpeg RTSP jitter/reordering: potentially lowers delay, but
+            // can cause visible artifacts on weak Wi-Fi. Opt-in only.
+            p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "max_delay", 100000L)
+            p.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reorder_queue_size", 0L)
+        }
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1L)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1L)
         p.setOption(
@@ -186,7 +205,7 @@ class IjkSurfaceView(
             "mediacodec-handle-resolution-change",
             1L
         )
-        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 1L)
+        p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", if (ultra) 3L else 1L)
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1L)
         p.setOption(
             IjkMediaPlayer.OPT_CATEGORY_PLAYER,
@@ -196,12 +215,12 @@ class IjkSurfaceView(
         p.setOption(
             IjkMediaPlayer.OPT_CATEGORY_PLAYER,
             "min-frames",
-            if (low) 2L else if (smooth) 8L else 4L
+            if (ultra) 1L else if (low) 2L else if (smooth) 8L else 4L
         )
         p.setOption(
             IjkMediaPlayer.OPT_CATEGORY_PLAYER,
             "max_cached_duration",
-            if (low) 250L else if (smooth) 900L else 500L
+            if (ultra) 120L else if (low) 250L else if (smooth) 900L else 500L
         )
         p.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 1L)
     }
@@ -280,7 +299,10 @@ class IjkSurfaceView(
             "bufferEvents" to bufferEvents,
             "retries" to retryEvents,
             "state" to currentState,
-            "hardwareRequested" to true
+            "hardwareRequested" to true,
+            "firstFrameMs" to firstFrameStartupMs,
+            "videoWidth" to (current?.videoWidth ?: 0),
+            "videoHeight" to (current?.videoHeight ?: 0)
         )
     }
 

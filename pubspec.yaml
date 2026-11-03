@@ -1,7 +1,7 @@
 name: ttx_a500s_player
 description: TTX A500S RTSP live video with native IJKPlayer and MediaCodec
 publish_to: none
-version: 1.3.0+6
+version: 1.4.0+7
 
 environment:
   sdk: '>=3.7.0 <4.0.0'

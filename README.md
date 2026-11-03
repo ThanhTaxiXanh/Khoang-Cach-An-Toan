@@ -95,3 +95,20 @@ Camera screenshots prove `OPTIONS 200`, `DESCRIBE 200`, dynamic `Content-Base` (
 - If `SETUP` fails (461 etc.), test alternate transport; if `PLAY 200` but zero RTP, investigate camera session/firmware and Wi-Fi; if RTP arrives but IJK shows 0 FPS, focus on IJK demux, buffering or H.264 decoder.
 - Do not replace the original `/livestream/12` DESCRIBE URL with the dynamic `Content-Base`; the latter is scoped to a specific SDP session.
 - No recording, upload, auth bypass, or camera configuration writes. All probing is limited to the camera Wi-Fi network already joined by the user.
+
+
+## V1.4 – Experiment: reduce ~3-second end-to-end live delay
+
+On-camera test confirmed that **V1.3 renders A500S live RTSP**; viewer estimated ~3 s lag versus camera. This is an empirical observation, not an instrumented measurement.
+
+V1.4 **retains the V1.3 'Cân bằng' and 'Ưu tiên ổn định' presets unchanged** and adds an opt-in `Thử trễ tối thiểu (dễ giật)` profile:
+- Reduced FFmpeg `analyzeduration`, `probesize` for faster startup;
+- `fflags=nobuffer`, `max_delay=100000` µs and `reorder_queue_size=0` for lower buffering/reordering;
+- IJK `min-frames=1`, `max_cached_duration=120`, `framedrop=3` for aggressive frame presentation;
+- Native telemetry adds startup first-frame milliseconds and video dimensions. **First-frame startup time is not an end-to-end latency measurement.**
+
+Settings apply only after stopping and reopening playback. If the experimental profile becomes choppy, return to the working balanced profile. Increasing driving speed does not inherently make RTP faster or slower; Wi-Fi signal, encoder backlog, decoder FPS, buffering and thermal throttling matter. Do not assume a 3-second-old video feed is safe for live collision alerts.
+
+### Repeatable latency test (parked vehicle)
+
+With a second phone recording both the dashcam's own live preview and the TTX phone in one shot, make a clear hand movement in view. Measure the time between the same visual event on both displays. Repeat at 0, 2 and 10 minutes for baseline and experimental, using the same transport. Note lag (seconds), FPS output, reconnect and buffering counts. **Camera screen may itself be delayed; this measures the gap between the two displays, not necessarily sensor-to-phone latency.**

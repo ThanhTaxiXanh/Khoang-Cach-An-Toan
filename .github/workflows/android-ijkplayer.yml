@@ -90,6 +90,6 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: TTX-A500S-IJKPlayer-RTSP-V1-3-APK
+          name: TTX-A500S-IJKPlayer-LOWLATENCY-V1-4-APK
           path: build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error

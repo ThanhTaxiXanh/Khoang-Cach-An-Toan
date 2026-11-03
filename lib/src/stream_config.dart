@@ -1,4 +1,5 @@
 enum PlaybackProfile {
+  experimental('Thử trễ tối thiểu (dễ giật)', 'ultra'),
   lowLatency('Ưu tiên độ trễ thấp', 'low'),
   balanced('Cân bằng', 'balanced'),
   smooth('Ưu tiên ổn định', 'smooth');

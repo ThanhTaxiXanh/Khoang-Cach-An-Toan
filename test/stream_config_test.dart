@@ -34,6 +34,7 @@ void main() {
   });
 
   test('Profiles have stable serializable names', () {
+    expect(PlaybackProfile.experimental.value, 'ultra');
     expect(PlaybackProfile.balanced.value, 'balanced');
     expect(RtspTransport.tcp.value, 'tcp');
   });

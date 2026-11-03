@@ -364,6 +364,8 @@ class _LiveScreenState extends State<LiveScreen> {
             Wrap(spacing: 7, runSpacing: 4, children: [
               Chip(label: Text('Trạng thái: $_state')),
               Chip(label: Text('FPS decode: ${_displayNum('decodeFps')}')),
+              Chip(label: Text('Frame đầu: ${_displayNum('firstFrameMs', decimals: 0)} ms')),
+              Chip(label: Text('Video: ${_displayNum('videoWidth', decimals: 0)} × ${_displayNum('videoHeight', decimals: 0)}')),
               Chip(label: Text('FPS output: ${_displayNum('outputFps')}')),
               Chip(label: Text('TCP: ${_displayNum('tcpKbps', decimals: 0)} KB/s')),
               Chip(label: Text('Đệm: ${_displayNum('cachedMs', decimals: 0)} ms')),
@@ -371,6 +373,13 @@ class _LiveScreenState extends State<LiveScreen> {
               Chip(label: Text('Nối lại: ${_stats['retries'] ?? 0}')),
             ]),
             const SizedBox(height: 10),
+            const Text(
+              'Chế độ Thử trễ tối thiểu là thử nghiệm, dễ mất frame khi Wi-Fi yếu. '
+              'Frame đầu đo thời gian mở phiên, KHÔNG phải độ trễ hình ảnh end-to-end. '
+              'Nếu xuất hiện giật/đứt hình, trở về Cân bằng của V1.3.',
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 8),
             const Text(
               'Camera trước/sau: A500S chưa xác minh được live rear hoặc '
               'hai luồng đồng thời. Không mặc định /livestream/13 là camera sau. '
