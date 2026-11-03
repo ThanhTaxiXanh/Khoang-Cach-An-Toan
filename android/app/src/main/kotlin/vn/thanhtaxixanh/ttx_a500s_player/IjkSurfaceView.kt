@@ -45,6 +45,7 @@ class IjkSurfaceView(
     private var bufferStartedAt = 0L
     private var renderingStarted = false
     private var firstFrameStartupMs: Long = 0L
+    private var surfaceLostEvents = 0
     // Linker/JNI failure is process-local and cannot be fixed by RTSP retry.
     private var fatalNativeMessage: String? = null
 
@@ -313,6 +314,7 @@ class IjkSurfaceView(
             "hardwareRequested" to true,
             "decoder" to decoder,
             "cachedPackets" to cachedPackets,
+            "nativeSurfaceLostEvents" to surfaceLostEvents,
             "cachedBytes" to cachedBytes,
             "firstFrameMs" to firstFrameStartupMs,
             "videoWidth" to (current?.videoWidth ?: 0),
@@ -344,6 +346,7 @@ class IjkSurfaceView(
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
+        if (requested) surfaceLostEvents++
         surfaceReady = false
         releasePlayer()
         if (requested) signal("waiting_surface", "Surface bị hủy, chờ khôi phục")

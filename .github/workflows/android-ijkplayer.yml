@@ -90,6 +90,6 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: TTX-A500S-IJKPlayer-DIAGNOSTICS-V1-5-APK
+          name: TTX-A500S-IJKPlayer-SURFACE-FIX-V1-5-1-APK
           path: build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error

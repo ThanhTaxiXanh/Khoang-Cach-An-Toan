@@ -56,6 +56,9 @@ class _LiveScreenState extends State<LiveScreen> {
   bool _probing = false;
   String _probeReport = '';
   final List<LiveSample> _samples = <LiveSample>[];
+  Map<String, dynamic> _lastActiveStats = <String, dynamic>{};
+  DateTime? _lastActiveTime;
+  int _surfaceLostEvents = 0;
   DateTime? _runStartedAt;
   final _observedLag = TextEditingController(text: '3');
   String _reference = 'Chưa xác định nguồn so sánh';
@@ -75,6 +78,7 @@ class _LiveScreenState extends State<LiveScreen> {
     setState(() {
       _state = event['state'] as String? ?? _state;
       _message = event['message'] as String? ?? _message;
+      if (_state == 'waiting_surface') _surfaceLostEvents++;
       if (_state == 'native_error' || _state == 'stream_error') {
         _requested = false;
         _busy = false;
@@ -103,10 +107,22 @@ class _LiveScreenState extends State<LiveScreen> {
     try {
       final stats = await IjkBridge.stats(id);
       if (mounted && id == _viewId) {
-        // Only 1 sample per second; no video frame traverses Dart.
-        _samples.add(LiveSample.fromNative(DateTime.now(), stats));
-        if (_samples.length > 600) {
-          _samples.removeRange(0, _samples.length - 600);
+        // Include zero-FPS samples only while there is an actual player.
+        // Surface destruction has no decoder; zero readings there would
+        // corrupt the 10-minute average and mask the last real decoder.
+        final playerState = stats['state'] as String? ?? _state;
+        final hasMedia = (stats['videoWidth'] as num? ?? 0) > 0;
+        if (hasMedia) {
+          _lastActiveStats = Map<String, dynamic>.of(stats);
+          _lastActiveTime = DateTime.now();
+        }
+        if (hasMedia &&
+            (playerState == 'playing' || playerState == 'buffering' ||
+                playerState == 'prepared')) {
+          _samples.add(LiveSample.fromNative(DateTime.now(), stats));
+          if (_samples.length > 600) {
+            _samples.removeRange(0, _samples.length - 600);
+          }
         }
         setState(() => _stats = stats);
       }
@@ -196,6 +212,9 @@ class _LiveScreenState extends State<LiveScreen> {
       _requested = true;
       _samples.clear();
       _stats = <String, dynamic>{};
+      _lastActiveStats = <String, dynamic>{};
+      _lastActiveTime = null;
+      _surfaceLostEvents = 0;
       _runStartedAt = DateTime.now();
       _message = 'Đang yêu cầu IJKPlayer mở RTSP...';
     });
@@ -260,6 +279,9 @@ class _LiveScreenState extends State<LiveScreen> {
 
   String _diagnosticReport() {
     final summary = LiveSummary.fromSamples(_samples);
+    // Snapshot may be empty if SurfaceView was temporarily unavailable.
+    // Always report the last verified running decoder separately.
+    final active = _lastActiveStats.isNotEmpty ? _lastActiveStats : _stats;
     final elapsed = _runStartedAt == null
         ? 'chưa phát'
         : '${DateTime.now().difference(_runStartedAt!).inSeconds} giây';
@@ -269,23 +291,26 @@ class _LiveScreenState extends State<LiveScreen> {
       'Thời gian: ${DateTime.now().toIso8601String()}',
       'RTSP: ${_host.text}:${_port.text}${_path.text}',
       'Transport: ${_transport.value}; profile: ${_profile.value}',
-      'Trạng thái: $_state; thời lượng phát: $elapsed',
+      'Trạng thái HIỆN TẠI: $_state; thời lượng phát: $elapsed',
+      'Surface bị hủy trong phiên: $_surfaceLostEvents lần',
+      'Thông số hoạt động cuối lúc: ${_lastActiveTime?.toIso8601String() ?? "chưa có"}',
       'Trễ quan sát: ${lag.isEmpty ? "chưa ghi" : "$lag giây"}',
       'So sánh với: $_reference',
-      'Decoder thực tế: ${_stats['decoder'] ?? '--'}',
-      'Yêu cầu MediaCodec: ${_stats['hardwareRequested'] ?? false}',
-      'Video: ${_stats['videoWidth'] ?? '--'}x${_stats['videoHeight'] ?? '--'}',
-      'Thời gian frame đầu: ${_stats['firstFrameMs'] ?? '--'} ms',
+      'Decoder thực tế: ${active['decoder'] ?? '--'}',
+      'Yêu cầu MediaCodec: ${active['hardwareRequested'] ?? false}',
+      'Video: ${active['videoWidth'] ?? '--'}x${active['videoHeight'] ?? '--'}',
+      'Thời gian frame đầu: ${active['firstFrameMs'] ?? '--'} ms',
       'Số mẫu (tối đa 600): ${summary.count}',
       'FPS output trung bình: ${summary.avgOutputFps.toStringAsFixed(1)}',
       'FPS decode trung bình: ${summary.avgDecodeFps.toStringAsFixed(1)}',
       'Số mẫu FPS output dưới 0.5: ${summary.lowOutputSamples}',
       'IJK video cache max: ${summary.maxCacheMs} ms',
       'IJK video cache P95: ${summary.p95CacheMs} ms',
-      'Gói video đang đệm: ${_stats['cachedPackets'] ?? '--'}',
-      'Bytes video đang đệm: ${_stats['cachedBytes'] ?? '--'}',
-      'Buffer events: ${_stats['bufferEvents'] ?? '--'}',
-      'Reconnects: ${_stats['retries'] ?? '--'}',
+      'Gói video đang đệm: ${active['cachedPackets'] ?? '--'}',
+      'Bytes video đang đệm: ${active['cachedBytes'] ?? '--'}',
+      'Buffer events: ${active['bufferEvents'] ?? '--'}',
+      'Reconnects: ${active['retries'] ?? '--'}',
+      'Các mẫu FPS chỉ tính khi decoder tồn tại; SurfaceView mất không tính là khung rơi.',
       'LƯU Ý: CacheMs và firstFrameMs không phải độ trễ end-to-end.'
     ].join('\n');
   }
@@ -314,22 +339,31 @@ class _LiveScreenState extends State<LiveScreen> {
         ],
       ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(14),
+        // Keep the Android native SurfaceView mounted while scrolling controls.
+        // If put inside a lazy ListView, it is destroyed when offscreen,
+        // causing waiting_surface, black frames and RTSP reconnection.
+        child: Column(
           children: [
-            AspectRatio(
-              aspectRatio: 16 / 9,
-              child: DecoratedBox(
-                decoration: const BoxDecoration(color: Colors.black),
-                child: IjkSurface(
-                  onCreated: (int id) {
-                    if (!mounted) return;
-                    setState(() => _viewId = id);
-                  },
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(color: Colors.black),
+                  child: IjkSurface(
+                    onCreated: (int id) {
+                      if (!mounted) return;
+                      setState(() => _viewId = id);
+                    },
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 8),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(14),
+                children: [
+                  const SizedBox(height: 8),
             Text(_message,
                 style: TextStyle(
                     color: _state == 'error' ? colors.error : colors.onSurface,
@@ -421,8 +455,9 @@ class _LiveScreenState extends State<LiveScreen> {
             Wrap(spacing: 7, runSpacing: 4, children: [
               Chip(label: Text('Trạng thái: $_state')),
               Chip(label: Text('FPS decode: ${_displayNum('decodeFps')}')),
-              Chip(label: Text('Decoder: ${_stats['decoder'] ?? '--'}')),
-              Chip(label: Text('Gói đệm: ${_stats['cachedPackets'] ?? '--'}')),
+              Chip(label: Text('Decoder: ${(_lastActiveStats.isNotEmpty ? _lastActiveStats : _stats)['decoder'] ?? '--'}')),
+              Chip(label: Text('Surface mất: $_surfaceLostEvents')),
+              Chip(label: Text('Gói đệm: ${(_lastActiveStats.isNotEmpty ? _lastActiveStats : _stats)['cachedPackets'] ?? '--'}')),
               Chip(label: Text('Frame đầu: ${_displayNum('firstFrameMs', decimals: 0)} ms')),
               Chip(label: Text('Video: ${_displayNum('videoWidth', decimals: 0)} × ${_displayNum('videoHeight', decimals: 0)}')),
               Chip(label: Text('FPS output: ${_displayNum('outputFps')}')),
@@ -480,6 +515,9 @@ class _LiveScreenState extends State<LiveScreen> {
               'Phần mềm không thể đảm bảo không giật ở mọi tốc độ xe. '
               'Chống rung vật lý (EIS) chưa được triển khai; không có quảng cáo tính năng giả.',
               style: TextStyle(fontSize: 12),
+            ),
+                ],
+              ),
             ),
           ],
         ),

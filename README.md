@@ -126,3 +126,15 @@ Changes:
 - A first-frame start time is NOT end-to-end latency, and queue duration is only one subset of the total delay.
 - Next step: compare measured lag and queue occupancy. If displayed image lags 3 s while the IJK queue is short, further adjustment of `min-frames` / `max_cached_duration` alone is unlikely to solve it; investigate camera encoder/GOP, RTP PTS and external reference.
 - Never use ~3 s delayed feed as the only input for live collision warnings. Test while parked.
+
+
+## V1.5.1: Fix native Surface lost during scrolling (user screen-recording evidence)
+
+A ~63-second user screen recording demonstrated that `MediaCodec` decoded 640x480 at approximately 29.6 FPS around 16 seconds, but scrolling the controls caused `SurfaceView` to disappear (`waiting_surface`) and the player to stop; when scrolling back up the video was reinitialized. Consequently the V1.5 report showing 21 FPS on average, five zero-FPS samples and decoder `--` was contaminated by the surface lifecycle rather than a sustained RTSP throughput failure.
+
+Changes:
+- Move native `IjkSurface` out of the scrollable `ListView` into a permanently mounted player panel at the top of the page; only settings and diagnostics scroll inside `Expanded(ListView)`. This avoids lazily removing the native platform view when it leaves the viewport.
+- Count `waiting_surface` lifecycle events, and retain the last valid native decoder/queue snapshot for copyable reports if the surface is later lost.
+- Ignore non-playing, non-decoding time with no video dimensions in mean FPS calculations, rather than labeling view destruction as video frame drops.
+- Keep V1.4 IJK options and RTSP host/path unchanged. This release addresses UI lifecycle, not the remaining ~3 seconds of real-world sensor-to-screen delay.
+- No new stabilizer, frame filters, frame copying or network uploading.
