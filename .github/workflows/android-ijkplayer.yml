@@ -1,0 +1,95 @@
+name: Android IJKPlayer A500S RTSP Probe APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "lib/**"
+      - "android/**"
+      - "pubspec.yaml"
+      - "test/**"
+      - ".github/workflows/android-ijkplayer.yml"
+  pull_request:
+    paths:
+      - "lib/**"
+      - "android/**"
+      - "pubspec.yaml"
+      - "test/**"
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Prepare Android scaffold
+        run: |
+          flutter create --platforms=android --org vn.thanhtaxixanh --project-name ttx_a500s_player .
+          flutter pub get
+      - name: Static analysis
+        run: flutter analyze
+      - name: Unit tests
+        run: flutter test
+      - name: Assemble release APK
+        run: flutter build apk --release --target-platform android-arm,android-arm64 --split-per-abi
+      - name: Verify signed APK and IJKPlayer native libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_tools="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          apksigner="$build_tools/apksigner"
+          aapt="$build_tools/aapt"
+          test -x "$apksigner"
+          test -x "$aapt"
+          for abi in arm64-v8a armeabi-v7a; do
+            apk="build/app/outputs/flutter-apk/app-${abi}-release.apk"
+            test -f "$apk"
+            echo "Verifying Android APK: $apk"
+            "$apksigner" verify --verbose --print-certs "$apk"
+            "$aapt" dump badging "$apk" > "$RUNNER_TEMP/aapt-${abi}.txt"
+            sed -n '1,5p' "$RUNNER_TEMP/aapt-${abi}.txt"
+            grep -q "^package: name='vn.thanhtaxixanh.ttx_a500s_player'" "$RUNNER_TEMP/aapt-${abi}.txt"
+            unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-${abi}-files.txt"
+            for lib in libijkplayer.so libijkffmpeg.so libijksdl.so; do
+              if ! grep -Fxq "lib/$abi/$lib" "$RUNNER_TEMP/apk-${abi}-files.txt"; then
+                echo "Missing native library lib/$abi/$lib in $apk"
+                exit 1
+              fi
+            done
+            # R8 can silently rename JNI-referenced Java classes: verify
+            # original DEX descriptors are present after release shrink.
+            python3 - "$apk" <<'PY'
+          import sys, zipfile
+          apk = sys.argv[1]
+          expected = [
+              b"Ltv/danmaku/ijk/media/player/IjkMediaPlayer;",
+              b"Ltv/danmaku/ijk/media/player/misc/IMediaDataSource;",
+              b"Ltv/danmaku/ijk/media/player/misc/IAndroidIO;",
+          ]
+          with zipfile.ZipFile(apk) as z:
+              dex = b"".join(z.read(p) for p in z.namelist() if p.endswith(".dex"))
+          assert dex, f"No DEX files found in {apk}"
+          absent = [c.decode() for c in expected if c not in dex]
+          if absent:
+              raise SystemExit(f"FATAL: IJK JNI classes renamed/stripped in {apk}: {absent}")
+          print("PASS: IJK JNI class descriptors retained in", apk)
+          PY
+          done
+      - name: Upload APKs
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TTX-A500S-IJKPlayer-SESSION-DIAGNOSTICS-V1-6-APK
+          path: build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
