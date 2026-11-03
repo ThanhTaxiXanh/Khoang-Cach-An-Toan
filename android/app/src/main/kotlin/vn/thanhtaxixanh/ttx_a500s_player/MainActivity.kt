@@ -52,6 +52,21 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "wifiStatus" -> result.success(wifiStatus())
+                "probeRtsp" -> {
+                    val url = call.argument<String>("url")
+                    val wifi = cameraWifi()
+                    if (url == null || wifi == null) {
+                        result.error("NO_WIFI", "Kết nối Wi-Fi 70mai trước khi kiểm tra RTSP", null)
+                    } else {
+                        // Do not probe network on Flutter/UI thread.
+                        Thread {
+                            val outcome = RtspProbe(wifi).check(url)
+                            mainHandler.post {
+                                result.success(outcome)
+                            }
+                        }.start()
+                    }
+                }
                 "open" -> {
                     val id = call.argument<Int>("viewId")
                     val url = call.argument<String>("url")

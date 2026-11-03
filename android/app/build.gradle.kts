@@ -50,9 +50,10 @@ flutter {
 }
 
 dependencies {
-    // ORIGINAL IjkMediaPlayer API used by 70mai, NOT libVLC / ExoPlayer.
-    // 0.8.8 was released in 2018; upgrade/fork after device validation.
-    implementation("tv.danmaku.ijk.media:ijkplayer-java:0.8.8")
-    runtimeOnly("tv.danmaku.ijk.media:ijkplayer-arm64:0.8.8")
-    runtimeOnly("tv.danmaku.ijk.media:ijkplayer-armv7a:0.8.8")
+    // This is *IJKPlayer*, with RTSP-capable FFmpeg, NOT libVLC / ExoPlayer.
+    // Original Bilibili 0.8.8 prebuilt lite FFmpeg omits RTSP demuxing.
+    // GSYIjkJava supplies the same tv.danmaku.ijk.media.player.IjkMediaPlayer
+    // Java API; ex_so supplies the matched RTSP-enabled FFmpeg/IJK/SDL binaries.
+    implementation("io.github.carguo:gsyijkjava:1.0.0")
+    runtimeOnly("io.github.carguo:gsyvideoplayer-ex_so:13.2.1")
 }

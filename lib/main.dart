@@ -52,6 +52,8 @@ class _LiveScreenState extends State<LiveScreen> {
   RtspTransport _transport = RtspTransport.tcp;
   PlaybackProfile _profile = PlaybackProfile.balanced;
   Map<String, dynamic> _stats = <String, dynamic>{};
+  bool _probing = false;
+  String _probeReport = '';
 
   @override
   void initState() {
@@ -68,7 +70,7 @@ class _LiveScreenState extends State<LiveScreen> {
     setState(() {
       _state = event['state'] as String? ?? _state;
       _message = event['message'] as String? ?? _message;
-      if (_state == 'native_error') {
+      if (_state == 'native_error' || _state == 'stream_error') {
         _requested = false;
         _busy = false;
       }
@@ -98,6 +100,50 @@ class _LiveScreenState extends State<LiveScreen> {
       if (mounted && id == _viewId) setState(() => _stats = stats);
     } catch (_) {
       // Keep the control UI responsive if the native view has been disposed.
+    }
+  }
+
+  Future<void> _probeRtsp() async {
+    if (_probing) return;
+    final port = int.tryParse(_port.text.trim());
+    if (port == null) {
+      setState(() => _probeReport = 'Cổng RTSP không hợp lệ.');
+      return;
+    }
+    final config = StreamConfig(
+      host: _host.text,
+      port: port,
+      path: _path.text,
+    );
+    if (config.validationError != null) {
+      setState(() => _probeReport = config.validationError!);
+      return;
+    }
+    setState(() {
+      _probing = true;
+      _probeReport = 'Đang kiểm tra TCP/RTSP bằng mạng Wi-Fi của camera...';
+    });
+    try {
+      final data = await IjkBridge.probeRtsp(config.url);
+      if (!mounted) return;
+      final lines = <String>[
+        'TCP: ${data['tcp'] ?? '--'}',
+        'OPTIONS: ${data['options'] ?? '--'}',
+        'DESCRIBE: ${data['describe'] ?? '--'}',
+        'Content-Type: ${data['contentType'] ?? '--'}',
+        'Content-Base: ${data['contentBase'] ?? '--'}',
+        'Codec: ${data['codec'] ?? '--'}',
+        'Track: ${data['track'] ?? '--'}',
+      ];
+      final error = data['error'];
+      if (error != null && error.toString().isNotEmpty) {
+        lines.add('LỖI: $error');
+      }
+      setState(() => _probeReport = lines.join('\n'));
+    } catch (e) {
+      if (mounted) setState(() => _probeReport = 'Lỗi chẩn đoán: $e');
+    } finally {
+      if (mounted) setState(() => _probing = false);
     }
   }
 
@@ -282,6 +328,16 @@ class _LiveScreenState extends State<LiveScreen> {
                       if (p != null) setState(() => _profile = p);
                     },
             ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _probing ? null : _probeRtsp,
+              icon: const Icon(Icons.network_check),
+              label: Text(_probing ? 'Đang kiểm tra RTSP...' : 'Kiểm tra RTSP (OPTIONS / DESCRIBE)'),
+            ),
+            if (_probeReport.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              SelectableText(_probeReport, style: const TextStyle(fontSize: 12)),
+            ],
             const SizedBox(height: 12),
             FilledButton.icon(
               onPressed: _busy ? null : (_requested ? _close : _open),

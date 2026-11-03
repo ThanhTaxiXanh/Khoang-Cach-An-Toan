@@ -1,6 +1,6 @@
 # ThanhTaxiXanh · A500S RTSP Live (Flutter + Android IJKPlayer)
 
-**Bản thử nghiệm V1.1**: Android Flutter/Dart + native **IjkMediaPlayer 0.8.8**, FFmpeg, MediaCodec khi hỗ trợ. **Không sử dụng libVLC, ExoPlayer hoặc thư viện native lấy từ ứng dụng 70mai.**
+**Bản thử nghiệm V1.2**: Android Flutter/Dart + native **IJKPlayer (GSY RTSP-enabled FFmpeg)**, MediaCodec khi hỗ trợ. **Không sử dụng libVLC, ExoPlayer hoặc thư viện native lấy từ ứng dụng 70mai.**
 
 ## Kiến trúc
 
@@ -67,3 +67,17 @@ Các artifact ban đầu từ build #13/#14 có thể **chưa được ký số*
 - **Evidence required before calling this fixed:** install the new ABI-matched APK on the same phone, open the player and verify no further `JNI_OnLoad` errors. CI build success only validates compilation, signing and DEX packaging; it cannot run your 70mai hardware.
 - Diagnostic if persistent: Android `logcat` immediately before the *first* `JNI_OnLoad` failure, especially `J4A`, `NoSuchMethodError`, `NoSuchFieldError`, `UnsatisfiedLinkError` or unsupported library linkage.
 - Original IJKPlayer issue: https://github.com/bilibili/ijkplayer/issues/1656
+
+
+## V1.2: H264 RTSP trong FFmpeg + chẩn đoán camera (03/11/2026)
+- Ảnh A500S của người dùng ghi nhận JNI chạy nhưng `IJK error: what=-10000 extra=0`, không nhận video (0 FPS/0 KBps) ở cả TCP/UDP.
+- Mã `-10000` là lỗi player tổng quát: không tự kết luận rằng RTSP URL sai.
+- Prebuilt `tv.danmaku.ijk.media:ijkplayer-*:0.8.8` sử dụng profile FFmpeg lite thiếu RTSP/RTP. Vì thế thay Java và native đồng bộ:
+  - `io.github.carguo:gsyijkjava:1.0.0`
+  - `io.github.carguo:gsyvideoplayer-ex_so:13.2.1` (khai báo hỗ trợ RTSP)
+- Vẫn là **IJKPlayer**, không phải libVLC hoặc ExoPlayer. Giữ Flutter -> native Android IJKPlayer -> SurfaceView.
+- Màn hình có nút **Kiểm tra RTSP (OPTIONS / DESCRIBE)**; truy vấn đọc (không đổi cấu hình camera) từ mạng Wi-Fi hiện tại, hiển thị status 200/401/404, Content-Base, SDP codec và track.
+- Nếu thất bại trước frame đầu, dừng sau ba lần nối lại để tránh vòng lặp vô ích.
+- Báo cáo `DESCRIBE 200` của A500S và `Content-Base` mang mã phiên động không có nghĩa `/livestream/12` sai: dùng URL ban đầu để DESCRIBE, xử lý Content-Base ở trình phát RTSP.
+- Kiểm tra camera trực tiếp sau khi dừng xe an toàn. Gỡ bản cài có chữ ký khác nếu Android từ chối cập nhật; sao lưu dữ liệu trước khi gỡ.
+- Cần xác nhận mã từ CI và trên A500S vật lý; không đánh đồng APK build success với video chạy được.

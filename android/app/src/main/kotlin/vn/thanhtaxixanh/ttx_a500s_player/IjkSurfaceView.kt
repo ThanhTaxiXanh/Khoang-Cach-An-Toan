@@ -208,6 +208,19 @@ class IjkSurfaceView(
 
     private fun scheduleReconnect(reason: String) {
         if (!requested || disposed || retryPending) return
+        // When RTSP never decoded even a single frame, exponential reconnect
+        // cannot repair an invalid stream or FFmpeg demuxer.
+        if (!renderingStarted && retryAttempt >= 3) {
+            requested = false
+            retryPending = false
+            releasePlayer()
+            signal(
+                "stream_error",
+                "$reason · Dừng sau 3 lần thử không có hình. " +
+                    "Hãy dùng nút Kiểm tra RTSP để xác định phản hồi của A500S."
+            )
+            return
+        }
         retryPending = true
         retryEvents++
         val delaySec = min(16, 1 shl min(4, retryAttempt))
