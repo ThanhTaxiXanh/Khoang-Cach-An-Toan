@@ -3,7 +3,7 @@
 Flutter stable 3.47 requires Gradle >=8.14 while generated AGP 9 fails on legacy Kotlin Gradle DSL. An earlier attempt with generated AGP 9 failed to compile the legacy Kotlin Gradle DSL. To avoid deprecation errors while validating original IJKPlayer 0.8.8, this project pins:
 
 - Gradle 8.14
-- Android Gradle Plugin 8.9.2
+- Android Gradle Plugin 8.11.1
 - Kotlin Gradle Plugin 2.1.20
 - Java 17
 - Flutter stable via GitHub Actions
