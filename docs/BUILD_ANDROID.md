@@ -4,7 +4,7 @@ Flutter stable 3.47 requires Gradle >=8.14 while generated AGP 9 fails on legacy
 
 - Gradle 8.14
 - Android Gradle Plugin 8.11.1
-- Kotlin Gradle Plugin 2.1.20
+- Kotlin Gradle Plugin 2.2.20
 - Java 17
 - Flutter stable via GitHub Actions
 
